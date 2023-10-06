@@ -1,0 +1,43 @@
+from pathlib import Path
+import beaker
+import pyteal as pt
+import algokit_utils
+
+app = beaker.Application("HelloWorldApp")
+
+@app.external
+def hello(name: pt.abi.String, *, output: pt.abi.String) -> pt.Expr:
+    return output.set(pt.Concat(pt.Bytes("This is, "), name.get()))
+
+# Build the sample contract in this directory using Beaker and output to ./artifacts
+def build() -> Path:
+    """Build the beaker app, export it to disk, and return the Path to the app spec file"""
+    app_spec = app.build()
+    output_dir = Path(__file__).parent / "artifacts"
+    print(f"Dumping {app_spec.contract.name} to {output_dir}")
+    app_spec.export(output_dir)
+    return output_dir / "application.json"
+
+def demo() -> None:
+    app_spec_path = build()
+    algod_client = algokit_utils.get_algod_client(
+        algokit_utils.AlgoClientConfig("https://testnet-api.algonode.cloud", "a" * 64)
+    )
+    account = algokit_utils.get_account_from_mnemonic("")
+    app_client = algokit_utils.ApplicationClient(
+        algod_client=algod_client,
+        app_spec=app_spec_path,
+        signer=account,
+    )
+    create_response = app_client.create()
+    print(
+        f"""Deployed app in txid {create_response.tx_id}
+        App ID: {app_client.app_id} 
+        Address: {app_client.app_address} 
+    """
+    )
+    call_response = app_client.call(hello, name="Muds")
+    print(call_response.return_value)  
+
+if __name__ == "__main__":
+    demo()
